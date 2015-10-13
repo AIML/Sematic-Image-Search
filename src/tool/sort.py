@@ -51,7 +51,7 @@ class sort_tool(object):
         return i+1
 
     @staticmethod
-    def quick_sort(data,start,end):
+    def quick_sort(data,start=-1,end=-1):
         '''
         the recursive implemention of origin quick sort
         note:
@@ -59,10 +59,13 @@ class sort_tool(object):
             data contains the data
         the important thing is the data will be changed
         '''
-        part = sort_tool.__partion(data,start,end)
-
-        if part>2:
-            sort_tool.quick_sort(data,start,part-1)
-            if part<end-2:
+        if start==-1 and end==-1:
+            start = 0
+            end = len(data)-1
+        if end-start > 0:
+            part = sort_tool.__partion(data,start,end)
+            if part-start>1:
+                sort_tool.quick_sort(data,start,part-1)
+            if end-part>1:
                 sort_tool.quick_sort(data,part+1,end)
         return data
