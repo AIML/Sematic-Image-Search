@@ -10,10 +10,12 @@ import random   #for test
 from segmentor import segmentor
 from segmentor import vertex_node
 from disjoin_set import disjoin_set
+from similar import pixel_similar
 
-def main(img_path):
+def main(img_path,thresh):
     #load the image
-    img = cv.imread(img_path,0) #load the image in gray scale
+    raw_img = cv.imread(img_path)
+    img = cv.cvtColor(raw_img,cv.COLOR_RGB2GRAY) #use gray image
     if img==None:
         sys.stderr.write("error happened in Loading img!")
         return
@@ -22,6 +24,7 @@ def main(img_path):
     cv.waitKey(0)          #until a key stroke, it will continue
     #resize the iamge
     img = cv.resize(img,(128,128))
+    raw_img = cv.resize(raw_img,(128,128))
     #blur to remove the noise
     img = cv.GaussianBlur(img,(5,5),0.8,0.8,0)
     #Get the edge set of the image
@@ -33,17 +36,20 @@ def main(img_path):
             ij_edge=[]
             if j<width-1:
                 similar = abs(img.item(i,j)-img.item(i,j+1))
+                #similar = pixel_similar.normalize_dif((i,j),(i,j+1),img,5)
                 ij_edge.append((i*width+j+1,similar))
             if i<height-1:
                 similar = abs(img.item(i,j)-img.item(i+1,j))
+                #similar = pixel_similar.normalize_dif((i,j),(i+1,j),img,5)
                 ij_edge.append(((i+1)*width+j,similar))
             if j<width-1 and i<height-1:
                 similar = abs(img.item(i,j)-img.item(i+1,j+1))
+                #similar = pixel_similar.normalize_dif((i,j),(i+1,j+1),img,5)
                 ij_edge.append(((i+1)*width+(j+1),similar))
             e_set.append(ij_edge)
     print "The number of vertex is: "+str(len(e_set))
     #do segment
-    k=150   #(which is good for image with size: 128*128)
+    k=350   #(which is good for image with size: 128*128)
     img_seg = segmentor.grap_base_seg(e_set,k)
     print len(img_seg)
     count=0
@@ -53,6 +59,7 @@ def main(img_path):
     print "region number is: "+str(count)
     #draw the result
     regions = {}
+    '''
     for i in range(0,len(img_seg)):
         raw = i//width
         column = i-(raw*width)
@@ -72,23 +79,51 @@ def main(img_path):
                 pass
         else:
             regions[region]=[raw,raw,column,column]
+    '''
+    for i in range(0,len(img_seg)):
+        raw = i//width
+        column = i-(raw*width)
+        region = disjoin_set.find(img_seg[i])
+        if regions.has_key(region):
+            regions[region].append((raw,column))
+        else:
+            regions[region]=[(raw,column)]
+    pixel_num = 0 
+    for region in regions:
+        color=[random.randint(0,255),random.randint(0,255),random.randint(0,255)]
+        pixel_num += len(regions[region])
+        if len(regions[region]) > thresh:
+            for p in regions[region]:
+                raw_img[p[0],p[1]] = color
+    print "The number of pixel in region is: "+str(pixel_num)
+    cv.imshow('res',raw_img)
+    cv.waitKey(0)
+    cv.destroyAllWindows()
+
+    '''
     count=0
     for region in regions:
         count += 1
-        if count>50:
-            break
-        up_left = (regions[region][0],regions[region][2])
-        down_right = (regions[region][1],regions[region][3])
-        print "region"+str(count)+": "+str(up_left[0])+" "+str(up_left[1])
+        # if count>50:
+        #     break
+        
+        #note rectangle's coordinate is inverse with opencv's
+        
+        up_left = (regions[region][2],regions[region][0])
+        down_right = (regions[region][3],regions[region][1])
+        if (down_right[0]-up_left[0])*(down_right[1]-up_left[1]) < thresh:
+            continue
+        print "region"+str(count)+": "+str(up_left[0])+" "+str(up_left[1])\
+                +" "+str(down_right[0])+" "+str(down_right[1])
         cv.rectangle(img,up_left,down_right,255,1)
     raw_input()
     cv.imshow("result",img)
     cv.waitKey(0)
     cv.destroyAllWindows()
-
+    '''
 if __name__=="__main__":
-    if len(sys.argv)!=2:
-        sys.stderr.write("Plese input the path of the image!\n")
+    if len(sys.argv)!=3:
+        sys.stderr.write("Plese input the path of the image and area threshold\n")
         sys.exit(1)
     else:
-        main(sys.argv[1])
+        main(sys.argv[1],int(sys.argv[2]))
