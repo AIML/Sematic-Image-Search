@@ -1,6 +1,8 @@
 #!/usr/bin python
 import sys
 sys.path.insert(0,'/home/william/caffe-master/python')
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 import caffe
@@ -8,16 +10,14 @@ import caffe
 '''
 The wrapper for calling the deep-net to get the feature of the region
 Here will provide two way for calling:
-    One: provide the database, which path is stored in the test layer of
-         the test net prototxt
+    One: provide the folder where storage the image
     Two: provide a image to extract the feature
 '''
 class NetWrapper(object):
     
-    def __init__(self,caffe_path,cpu_only,model,proto):
+    def __init__(self,cpu_only,model,proto):
         '''
         Inital the net paramter:
-        caffe_path : used for load the caffe model
         cpu_only: true for use cpu,false for use GPU
         model: the mode have been trained
         proto: the prototxt defining the net structure used for testing 
@@ -48,8 +48,7 @@ class NetWrapper(object):
     def getfeature(
             self,
             image=None,
-            loop_num=0,
-            batch_size=0,
+            aux_file=None,
             out_layer=None,
             feature_layer=None,
             feature_path=None
@@ -63,6 +62,7 @@ class NetWrapper(object):
         feature for the picture in the test database
         loop_num is the time call for net forward pass
         batch size is the number of data feat to net each pass
+        total num is the number of test image
         the data of out_layer contains  the predict result 
         the data of feature_layer contains the feature result
         labels_file contians the label of input data
@@ -70,37 +70,56 @@ class NetWrapper(object):
         return:
           the result will stored in feature_file
         '''
-        if image==None:
-            '''
+        #reshape the net inpurt layer
+        shape=self.net.blobs['data'].data.shape
+        channel=shape[1]
+        width=shape[2]
+        height=shape[3]
+        self.net.blobs['data'].reshape(
+                1,
+                channel,
+                width,
+                height
+                )
+
+        if aux_file!=" ":
             try:
-                labels = np.loadtxt(labels_file,str,delimiter='\t')
+                labels = open(aux_file,'r')
             except:
-                print 'load label file error!'
-                return
-            '''
-            for i in range(0,loop_num):
+                sys.stderr.write("load label file error! "+aux_file+'\n')
+                return -1
+            try:
+                res = open(feature_path+'feature','w+')
+            except:
+                sys.stderr.write("load feature file error! "+featuere_path+'\n')
+                return -1
+            if not os.path.isdir(image):
+                sys.stderr.write("image should be path of folder for storing picture!\n")
+                return -1
+            cur_batch = 0
+            for line in labels:
+                line_sp = line.rstrip('\n').split('\t')
+                label = line_sp[1]
+                img_path = image+line_sp[0]
+                self.net.blobs['data'].data[...]=\
+                        self.transformer.preprocess(
+                                'data',
+                                caffe.io.load_image(img_path)
+                                )
                 out = self.net.forward()
-                try:
-                    file_id = open(feature_path+'feature'+str(i),'w+')
-                except:
-                    print 'open file error: '+str(i)
-                    return
                 #get the label and the feature
-                for j in range(0,batch_size):
-                    features = self.net.blobs[feature_layer].data[j]
-                    file_id.write('\t'.join(list(features))+'\n')
-                file_id.close()
+                feat = self.net.blobs[feature_layer].data[0]
+                s=''
+                for item in feat:
+                    s += str(item)+' '
+                s += label+'\n'
+                res.write(s)
+                cur_batch += 1
+            return cur_batch
         else:
-            shape=self.net.blobs['data'].data.shape
-            channel=shape[1]
-            width=shape[2]
-            height=shape[3]
-            self.net.blobs['data'].reshape(
-                    1,
-                    channel,
-                    width,
-                    height
-                    )
+            if not os.path.isfile(image):
+                sys.stderr.write(image+" is not a valiuable file name!\n")
+                return -1
             self.net.blobs['data'].data[...]=\
                     self.transformer.preprocess(
                             'data',
@@ -108,6 +127,10 @@ class NetWrapper(object):
                             )
             out = self.net.forward()
             #just test
+            #print feature
+            feat = self.net.blobs[feature_layer].data[0]
+            print feat
+            #print predicted result
             print("Predicted class is #{}."\
-                    .format(out['prob'][0].argmax()))
+                    .format(out[out_layer][0].argmax()))
 
